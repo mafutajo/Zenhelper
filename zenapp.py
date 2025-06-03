@@ -35,19 +35,38 @@ def load_plans_starting_with(letter, path="distinct_titles.csv"):
     return [p for p in cleaned_titles if p.startswith(letter.lower())]
 
 
-def search_candidates(selected_plans, path="grouped_by_email.csv"):
+import glob
+import streamlit as st
+
+
+def search_candidates(selected_plans, base_path="grouped_by_email_part"):
     st.cache_data.clear()
 
-    df = pd.read_csv(path, usecols=["email", "title_cleaned"])
+    # Récupérer tous les fichiers partagés
+    part_files = sorted(glob.glob(f"{base_path}*.csv"))
+    if not part_files:
+        st.error("Aucun fichier CSV trouvé.")
+        return pd.DataFrame()
+
+    # Charger et concaténer tous les fichiers
+    dfs = []
+    for file in part_files:
+        try:
+            df_chunk = pd.read_csv(file, usecols=["email", "title_cleaned"])
+            dfs.append(df_chunk)
+        except Exception as e:
+            st.warning(f"Erreur de lecture du fichier {file} : {e}")
+
+    df = pd.concat(dfs, ignore_index=True)
+
+    # Nettoyage des données
     df["email"] = df["email"].astype(str).str.strip().str.lower()
     df["title_cleaned"] = df["title_cleaned"].astype(str).str.strip().str.lower()
-
-    # Convertir la chaîne de plans en set
     df["all_plans_set"] = df["title_cleaned"].apply(lambda x: set(x.split(",")))
 
     selected_plans_set = set(selected_plans)
 
-    # Garder uniquement les lignes dont les plans contiennent *au minimum tous* les plans sélectionnés
+    # Filtrage : garder ceux qui ont *au moins tous* les plans sélectionnés
     df = df[df["all_plans_set"].apply(lambda plans: selected_plans_set.issubset(plans))]
 
     # Colonnes informatives
@@ -77,24 +96,33 @@ def search_candidates(selected_plans, path="grouped_by_email.csv"):
     ].sort_values(by="matching_count", ascending=False)
 
 
-def load_usernames(path="Doc/user.csv"):
-    df = pd.read_csv(path, usecols=["username"])
-    return sorted(df["username"].dropna().astype(str).str.strip().unique())
+def load_usernames(folder="Doc", prefix="user.csv_part"):
+    usernames = []
+
+    for file in sorted(os.listdir(folder)):
+        if file.startswith(prefix) and file.endswith(".csv"):
+            path = os.path.join(folder, file)
+            df = pd.read_csv(path, usecols=["username"])
+            usernames.extend(df["username"].dropna().astype(str).str.strip())
+
+    return sorted(set(usernames))
 
 
-def search_users_by_name(name_input, path="Doc/user.csv"):
+def search_users_by_name(name_input, folder="Doc", prefix="user.csv_part"):
     st.cache_data.clear()  # Vider tout cache résiduel
-
     matching_rows = []
 
-    # Lecture par morceaux de 10 000 lignes
-    chunksize = 10000
-    for chunk in pd.read_csv(path, usecols=["username", "email"], chunksize=chunksize):
-        chunk["username"] = chunk["username"].astype(str).str.strip()
-        mask = chunk["username"].str.contains(name_input, case=False, na=False)
-        matches = chunk[mask]
-        if not matches.empty:
-            matching_rows.append(matches)
+    for file in sorted(os.listdir(folder)):
+        if file.startswith(prefix) and file.endswith(".csv"):
+            path = os.path.join(folder, file)
+            for chunk in pd.read_csv(
+                path, usecols=["username", "email"], chunksize=10000
+            ):
+                chunk["username"] = chunk["username"].astype(str).str.strip()
+                mask = chunk["username"].str.contains(name_input, case=False, na=False)
+                matches = chunk[mask]
+                if not matches.empty:
+                    matching_rows.append(matches)
 
     if matching_rows:
         result = pd.concat(matching_rows, ignore_index=True)

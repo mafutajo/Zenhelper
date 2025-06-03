@@ -1,62 +1,59 @@
+import os
 import pandas as pd
-import re
 
 
-def is_valid(title):
-    if "anonymized" in title.lower():
-        return False
-    if len(re.findall(r"[a-zA-Z0-9]", title)) < 3:
-        return False
-    return True
+import os
 
 
-def is_numeric_email_name(email):
-    if not isinstance(email, str):
-        return False
-    parts = email.split("@")
-    if len(parts) != 2:
-        return False
-    username, _ = parts
-    return username.isdigit()
+def delete_grouped_by_email_parts(folder=".", prefix="grouped_by_email_part"):
+    deleted = 0
+    for file in os.listdir(folder):
+        if file.startswith(prefix) and file.endswith(".csv"):
+            os.remove(os.path.join(folder, file))
+            deleted += 1
+    print(f"🗑️ {deleted} anciens fichiers supprimés.")
 
 
-def process_mail_list(input_path="Doc/mail_list.csv"):
-    df = pd.read_csv(input_path)
-
-    # Nettoyage de title_cleaned
-    df["title_cleaned"] = df["title_cleaned"].astype(str).str.strip().str.lower()
-    df = df[df["title_cleaned"].apply(is_valid)]
-
-    # Supprimer les emails avec identifiant numérique uniquement (avant le @)
-    if "email" in df.columns:
-        df = df[~df["email"].apply(is_numeric_email_name)]
-        print("✅ Emails avec identifiant uniquement numérique supprimés.")
-
-    # Supprimer la colonne created_at si elle existe
-    if "created_at" in df.columns:
-        df = df.drop(columns=["created_at"])
-        print("✅ Colonne 'created_at' supprimée.")
-
-    # === letters.csv ===
-    unique_letters = sorted(set(df["title_cleaned"].str[0].dropna()))
-    pd.DataFrame(unique_letters, columns=["first_letter"]).to_csv(
-        "letters.csv", index=False
-    )
-    print("✅ letters.csv généré.")
-
-    # === grouped_by_email.csv ===
-    if "email" in df.columns:
-        grouped = (
-            df.groupby("email")["title_cleaned"]
-            .apply(lambda x: ",".join(sorted(set(x.dropna().astype(str)))))
-            .reset_index()
-        )
-        grouped.to_csv("grouped_by_email.csv", index=False)
-        print("✅ grouped_by_email.csv généré.")
-    else:
-        print("⚠️ Colonne 'email' absente, grouped_by_email.csv non généré.")
+import pandas as pd
 
 
-# Exécution
-if __name__ == "__main__":
-    process_mail_list()
+def split_grouped_csv(
+    file_path="grouped_by_email.csv", max_mb=100, initial_chunksize=7_000_000
+):
+    name_without_ext = "grouped_by_email_part"
+    file_prefix = os.path.join(".", name_without_ext)
+
+    chunk_size = initial_chunksize
+    file_index = 0
+
+    print("📤 Début du split...")
+    reader = pd.read_csv(file_path, chunksize=chunk_size)
+
+    while True:
+        try:
+            chunk = next(reader)
+            output_file = f"{file_prefix}{file_index}.csv"
+            chunk.to_csv(output_file, index=False)
+
+            file_size = os.path.getsize(output_file) / (1024 * 1024)
+            print(f"✅ {output_file} — {file_size:.2f} MB")
+
+            if file_size > max_mb:
+                os.remove(output_file)
+                chunk_size = chunk_size // 2
+                print(f"⚠️ Trop gros ➝ réduction à {chunk_size} lignes")
+                if chunk_size < 1000:
+                    raise ValueError(
+                        "❌ chunk_size trop petit. Impossible de continuer."
+                    )
+                return split_grouped_csv(
+                    file_path, max_mb=max_mb, initial_chunksize=chunk_size
+                )
+
+            file_index += 1
+        except StopIteration:
+            break
+
+
+delete_grouped_by_email_parts()
+split_grouped_csv()
