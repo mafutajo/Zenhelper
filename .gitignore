@@ -4,7 +4,6 @@ Doc/
 zen/
 
 # Fichiers CSV volumineux
-*.csv
 
 # Environnement local
 __pycache__/
@@ -12,6 +11,6 @@ __pycache__/
 
 # Variables sensibles
 .env
-Doc/
+
 zen/
-*.csv
+
