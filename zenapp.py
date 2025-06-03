@@ -108,7 +108,7 @@ def load_usernames(folder="", prefix="user.csv_part"):
     return sorted(set(usernames))
 
 
-def search_users_by_name(name_input, folder="", prefix="user.csv_part"):
+def search_users_by_name(name_input, folder=".", prefix="user.csv_part"):
     st.cache_data.clear()  # Vider tout cache résiduel
     matching_rows = []
 
