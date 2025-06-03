@@ -276,7 +276,7 @@ else:
                     )
                 else:
                     st.write(f"**Liste des candidats potentiels ({len(filtered_df)})**")
-                    st.dataframe(filtered_df, use_container_width=True)
+                    st.dataframe(filtered_df, use_container_width=True, hide_index=True)
     with base[1]:
         st.markdown(
             """
@@ -490,7 +490,7 @@ else:
                     else:
                         progress.progress(100, text="✅ Recherche terminée")
                         st.success(f"{len(results)} email(s) trouvés")
-                        st.dataframe(results, use_container_width=True)
+                        st.dataframe(results, use_container_width=True, hide_index=True)
 
                     # Nettoyage de la barre une fois fini
                     progress.empty()
