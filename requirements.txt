@@ -1,0 +1,9 @@
+
+streamlit==1.40
+pandas 
+sqlalchemy
+psycopg2-binary 
+google-cloud-bigquery 
+pandas-gbq
+streamlit-extras
+python-dotenv

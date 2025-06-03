@@ -1,0 +1,17 @@
+# Données locales
+# Dossiers lourds
+Doc/
+zen/
+
+# Fichiers CSV volumineux
+*.csv
+
+# Environnement local
+__pycache__/
+*.pyc
+
+# Variables sensibles
+.env
+Doc/
+zen/
+*.csv
