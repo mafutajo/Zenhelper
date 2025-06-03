@@ -1,16 +1,15 @@
 # Données locales
 # Dossiers lourds
-Doc/
+
 zen/
 
 # Fichiers CSV volumineux
 
-# Environnement local
-__pycache__/
+
 *.pyc
 
 # Variables sensibles
-.env
+
 
 zen/
 
