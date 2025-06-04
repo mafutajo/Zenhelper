@@ -10,8 +10,8 @@ import os
 
 # Charger les variables du .env
 load_dotenv()
-project_id = os.environ.get("GCP_PROJECT")
-bq_dataset = os.environ.get("BQ_DATASET")
+project_id = st.secrets["GCP_PROJECT"]
+bq_dataset = st.secrets["BQ_DATASET"]
 
 
 def load_first_letters():
@@ -184,7 +184,7 @@ def search_users_by_name(name_input):
 
 
 # --- Mot de passe à définir ici (à sécuriser dans un environnement prod) ---
-PASSWORD = os.environ.get("APP_PASSWORD")
+PASSWORD = st.secrets["APP_PASSWORD"]
 
 # --- Authentification ---
 if "auth" not in st.session_state:
