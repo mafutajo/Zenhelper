@@ -254,8 +254,7 @@ if not st.session_state.auth:
         )
 
         mdp = st.text_input("**Entrez le mot de passe** :", type="password")
-        if "letters" not in st.session_state:
-            st.session_state["letters"] = load_first_letters()
+
         splite = st.columns([2, 4, 2], gap="large")
         with splite[1]:
             if st.button(
@@ -269,6 +268,8 @@ if not st.session_state.auth:
                     st.error("**Mot de passe incorrect.**", icon=":material/error:")
 
 else:
+    if "letters" not in st.session_state:
+        st.session_state["letters"] = load_first_letters()
     base = st.tabs(["**✉️ Search user**", "**🗺️ Search plan**"])
 
     with base[0]:
