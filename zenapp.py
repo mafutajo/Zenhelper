@@ -15,12 +15,11 @@ import json
 load_dotenv()
 project_id = st.secrets["GCP_PROJECT"]
 bq_dataset = st.secrets["BQ_DATASET"]
-service_account_info = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
 
 
 def load_first_letters():
     credentials = service_account.Credentials.from_service_account_info(
-        service_account_info
+        st.secrets["GOOGLE_CREDENTIALS"]
     )
     client = bigquery.Client(credentials=credentials, project=credentials.project_id)
 
@@ -44,7 +43,7 @@ def load_plans_starting_with(letter):
     st.cache_data.clear()
 
     credentials = service_account.Credentials.from_service_account_info(
-        service_account_info
+        st.secrets["GOOGLE_CREDENTIALS"]
     )
     client = bigquery.Client(credentials=credentials, project=credentials.project_id)
 
@@ -74,7 +73,7 @@ def search_candidates(selected_plans):
         return pd.DataFrame()
 
     credentials = service_account.Credentials.from_service_account_info(
-        service_account_info
+        st.secrets["GOOGLE_CREDENTIALS"]
     )
     client = bigquery.Client(credentials=credentials, project=credentials.project_id)
 
@@ -182,7 +181,7 @@ def search_users_by_name(name_input):
     st.cache_data.clear()  # Forcer lecture fraîche
 
     credentials = service_account.Credentials.from_service_account_info(
-        service_account_info
+        st.secrets["GOOGLE_CREDENTIALS"]
     )
     client = bigquery.Client(credentials=credentials, project=credentials.project_id)
 
