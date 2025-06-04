@@ -29,7 +29,7 @@ def load_first_letters():
         letters = sorted(df["first_letter"].dropna().tolist())
         return letters
     except Exception as e:
-        print(f"⚠️ Erreur lors de la requête BigQuery : {e}")
+        st.write(f"⚠️ Erreur lors de la requête BigQuery : {e}")
         return []
 
 
