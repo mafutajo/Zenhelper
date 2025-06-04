@@ -7,15 +7,22 @@ import time
 import pandas as pd
 from google.cloud import bigquery
 import os
+from google.oauth2 import service_account
+from google.cloud import bigquery
+import json
 
 # Charger les variables du .env
 load_dotenv()
 project_id = st.secrets["GCP_PROJECT"]
 bq_dataset = st.secrets["BQ_DATASET"]
+service_account_info = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
 
 
 def load_first_letters():
-    client = bigquery.Client(project=project_id)
+    credentials = service_account.Credentials.from_service_account_info(
+        service_account_info
+    )
+    client = bigquery.Client(credentials=credentials, project=credentials.project_id)
 
     query = f"""
             SELECT DISTINCT
@@ -36,7 +43,10 @@ def load_first_letters():
 def load_plans_starting_with(letter):
     st.cache_data.clear()
 
-    client = bigquery.Client(project=project_id)
+    credentials = service_account.Credentials.from_service_account_info(
+        service_account_info
+    )
+    client = bigquery.Client(credentials=credentials, project=credentials.project_id)
 
     query = f"""
         SELECT DISTINCT
@@ -63,7 +73,10 @@ def search_candidates(selected_plans):
     if not selected_plans:
         return pd.DataFrame()
 
-    client = bigquery.Client(project=project_id)
+    credentials = service_account.Credentials.from_service_account_info(
+        service_account_info
+    )
+    client = bigquery.Client(credentials=credentials, project=credentials.project_id)
 
     selected_plans_sql_array = ", ".join([f"'{p.lower()}'" for p in selected_plans])
 
@@ -168,7 +181,10 @@ def is_numeric_email_name(email):
 def search_users_by_name(name_input):
     st.cache_data.clear()  # Forcer lecture fraîche
 
-    client = bigquery.Client(project=project_id)
+    credentials = service_account.Credentials.from_service_account_info(
+        service_account_info
+    )
+    client = bigquery.Client(credentials=credentials, project=credentials.project_id)
 
     query = f"""
     SELECT
