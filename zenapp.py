@@ -3,97 +3,144 @@ import pandas as pd
 import os
 from dotenv import load_dotenv
 import pandas as pd
-import re
+import time
+import pandas as pd
+from google.cloud import bigquery
+import os
 
 # Charger les variables du .env
 load_dotenv()
+project_id = os.environ.get("GCP_PROJECT", "kazadata-staging-prod-frkz")
+bq_dataset = os.environ.get("BQ_DATASET", "kzp_api_prod")
 
 
-def load_plans_starting_with(letter, path="distinct_titles.csv"):
-    st.cache_data.clear()
+def load_first_letters():
+    client = bigquery.Client(project=project_id)
+
+    query = f"""
+            SELECT DISTINCT
+            LOWER(SUBSTR(TRIM(title), 1, 1)) AS first_letter
+            FROM `{project_id}.{bq_dataset}.public_plan`
+            WHERE title IS NOT NULL and partner_id in (7,8)
+            """
 
     try:
-        df = pd.read_csv(path, usecols=["title_cleaned"])
+        df = client.query(query).to_dataframe()
+        letters = sorted(df["first_letter"].dropna().tolist())
+        return letters
     except Exception as e:
-        st.error(f"Erreur lors du chargement : {e}")
+        print(f"⚠️ Erreur lors de la requête BigQuery : {e}")
         return []
 
-    # Nettoyage renforcé
-    df["title_cleaned"] = (
-        df["title_cleaned"]
-        .astype(str)
-        .str.replace(r"[\n\r\t]", "", regex=True)  # retire les retours à la ligne
-        .str.replace(r"\s+", " ", regex=True)  # normalise les espaces
-        .str.strip()
-        .str.lower()
-    )
 
-    # Supprimer les doublons exacts après nettoyage
-    cleaned_titles = sorted(set(df["title_cleaned"].dropna()))
-
-    # Ne garder que ceux qui commencent par la lettre spécifiée
-    return [p for p in cleaned_titles if p.startswith(letter.lower())]
-
-
-import glob
-import streamlit as st
-
-
-def search_candidates(selected_plans, base_path="grouped_by_email_part"):
+def load_plans_starting_with(letter):
     st.cache_data.clear()
 
-    # Récupérer tous les fichiers partagés
-    part_files = sorted(glob.glob(f"{base_path}*.csv"))
-    if not part_files:
-        st.error("Aucun fichier CSV trouvé.")
+    client = bigquery.Client(project=project_id)
+
+    query = f"""
+        SELECT DISTINCT
+            LOWER(TRIM(title)) AS title_cleaned
+        FROM `{project_id}.{bq_dataset}.public_plan`
+        WHERE
+            title IS NOT NULL
+            AND partner_id IN (7, 8)
+            AND LOWER(TRIM(title)) LIKE '{letter.lower()}%'
+            AND NOT LOWER(title) LIKE '%anonymized%'
+    """
+
+    try:
+        df = client.query(query).to_dataframe()
+        return sorted(df["title_cleaned"].dropna().tolist())
+    except Exception as e:
+        st.error(f"Erreur lors de la requête BigQuery : {e}")
+        return []
+
+
+def search_candidates(selected_plans):
+    st.cache_data.clear()
+
+    if not selected_plans:
         return pd.DataFrame()
 
-    # Charger et concaténer tous les fichiers
-    dfs = []
-    for file in part_files:
-        try:
-            df_chunk = pd.read_csv(file, usecols=["email", "title_cleaned"])
-            dfs.append(df_chunk)
-        except Exception as e:
-            st.warning(f"Erreur de lecture du fichier {file} : {e}")
+    client = bigquery.Client(project=project_id)
 
-    df = pd.concat(dfs, ignore_index=True)
+    selected_plans_sql_array = ", ".join([f"'{p.lower()}'" for p in selected_plans])
 
-    # Nettoyage des données
-    df["email"] = df["email"].astype(str).str.strip().str.lower()
-    df["title_cleaned"] = df["title_cleaned"].astype(str).str.strip().str.lower()
-    df["all_plans_set"] = df["title_cleaned"].apply(lambda x: set(x.split(",")))
-
-    selected_plans_set = set(selected_plans)
-
-    # Filtrage : garder ceux qui ont *au moins tous* les plans sélectionnés
-    df = df[df["all_plans_set"].apply(lambda plans: selected_plans_set.issubset(plans))]
-
-    # Colonnes informatives
-    df["matching_plans"] = df["all_plans_set"].apply(
-        lambda plans: ", ".join(sorted(selected_plans_set.intersection(plans)))
+    query = f"""
+    WITH cleaned_plans AS (
+        SELECT
+            user_id,
+            LOWER(TRIM(title)) AS title_cleaned
+        FROM `{project_id}.{bq_dataset}.public_plan`
+        WHERE
+            title IS NOT NULL
+            AND NOT LOWER(title) LIKE '%anonymized%' AND NOT LOWER(title) LIKE '%deletedbyuser%'
+            AND partner_id IN (7, 8)
+    ),
+    aggregated_plans AS (
+        SELECT
+            user_id,
+            ARRAY_AGG(DISTINCT title_cleaned) AS all_plans
+        FROM cleaned_plans
+        GROUP BY user_id
+    ),
+    filtered_users AS (
+        SELECT
+            user_id,
+            all_plans,
+            ARRAY(
+                SELECT plan FROM UNNEST([{selected_plans_sql_array}]) AS plan
+                WHERE plan IN UNNEST(all_plans)
+            ) AS matching_plans
+        FROM aggregated_plans
+        WHERE NOT EXISTS (
+            SELECT plan FROM UNNEST([{selected_plans_sql_array}]) AS plan
+            WHERE plan NOT IN UNNEST(all_plans)
+        )
     )
-    df["matching_count"] = df["all_plans_set"].apply(
-        lambda plans: len(selected_plans_set.intersection(plans))
+    SELECT
+        m.username,
+        m.email,
+        f.all_plans,
+        f.matching_plans,
+        ARRAY_LENGTH(f.matching_plans) AS matching_count
+    FROM filtered_users AS f
+    JOIN `{project_id}.{bq_dataset}.public_member` AS m
+        ON f.user_id = m.id
+    ORDER BY matching_count DESC
+    """
+
+    try:
+        df = client.query(query).to_dataframe()
+    except Exception as e:
+        st.error(f"❌ Erreur BigQuery : {e}")
+        return pd.DataFrame()
+
+    # Nettoyage et formatage
+    df["matching_plans"] = df["matching_plans"].apply(
+        lambda x: ", ".join(sorted(set([p.strip() for p in x if p.strip()])))
     )
+    df["all_plans"] = df["all_plans"].apply(
+        lambda x: ", ".join(sorted(set([p.strip() for p in x if p.strip()])))
+    )
+
     df["completion"] = (
         df["matching_count"].astype(str) + f" / {len(selected_plans)} plans"
     )
-    df["all_plans"] = df["all_plans_set"].apply(lambda plans: ", ".join(sorted(plans)))
-    df["has_extra_plans"] = df["all_plans_set"].apply(
-        lambda plans: len(plans - selected_plans_set) > 0
-    )
+
+    # Détection des plans en plus (ceux que l'utilisateur a mais qui ne sont pas dans selected_plans)
 
     return df[
         [
+            "username",
             "email",
             "matching_plans",
             "all_plans",
             "completion",
-            "has_extra_plans",
             "matching_count",
         ]
-    ].sort_values(by="matching_count", ascending=False)
+    ]
 
 
 def load_usernames(folder="", prefix="user.csv_part"):
@@ -108,32 +155,36 @@ def load_usernames(folder="", prefix="user.csv_part"):
     return sorted(set(usernames))
 
 
-def search_users_by_name(name_input, folder=".", prefix="user.csv_part"):
-    st.cache_data.clear()  # Vider tout cache résiduel
-    matching_rows = []
+# --- Utilitaire pour exclure les emails numériques ---
+def is_numeric_email_name(email):
+    try:
+        local = email.split("@")[0]
+        return local.isdigit()
+    except:
+        return False
 
-    for file in sorted(os.listdir(folder)):
-        if file.startswith(prefix) and file.endswith(".csv"):
-            path = os.path.join(folder, file)
-            for chunk in pd.read_csv(
-                path, usecols=["username", "email"], chunksize=10000
-            ):
-                chunk["username"] = chunk["username"].astype(str).str.strip()
-                mask = chunk["username"].str.contains(name_input, case=False, na=False)
-                matches = chunk[mask]
-                if not matches.empty:
-                    matching_rows.append(matches)
 
-    if matching_rows:
-        result = pd.concat(matching_rows, ignore_index=True)
-    else:
-        result = pd.DataFrame(columns=["username", "email"])
+# --- Requête BigQuery directe ---
+def search_users_by_name(name_input):
+    st.cache_data.clear()  # Forcer lecture fraîche
 
-    return result
+    client = bigquery.Client(project=project_id)
+
+    query = f"""
+    SELECT
+        LOWER(TRIM(username)) AS username,
+        LOWER(TRIM(email)) AS email
+    FROM `{project_id}.{bq_dataset}.public_member`
+    WHERE
+        LOWER(username) LIKE '%{name_input.lower()}%'
+        AND NOT REGEXP_CONTAINS(SPLIT(email, "@")[OFFSET(0)], r'^[0-9]+$')
+    """
+
+    return client.query(query).to_dataframe()
 
 
 # --- Mot de passe à définir ici (à sécuriser dans un environnement prod) ---
-PASSWORD = os.environ.get("APP_PASSWORD", "changement")
+PASSWORD = os.environ.get("APP_PASSWORD")
 
 # --- Authentification ---
 if "auth" not in st.session_state:
@@ -144,6 +195,7 @@ st.set_page_config(
     page_icon="https://cdn-icons-png.freepik.com/512/4038/4038734.png?uid=R150887685&ga=GA1.1.1638742484.1714642249",
     layout="wide",
 )
+
 
 # 👉 Masquer le menu, le footer, le bouton Rerun et le bandeau "Running"
 st.markdown(
@@ -202,6 +254,8 @@ if not st.session_state.auth:
         )
 
         mdp = st.text_input("**Entrez le mot de passe** :", type="password")
+        if "letters" not in st.session_state:
+            st.session_state["letters"] = load_first_letters()
         splite = st.columns([2, 4, 2], gap="large")
         with splite[1]:
             if st.button(
@@ -284,10 +338,26 @@ else:
             else:
                 st.cache_data.clear()
 
+                progress_bar = st.progress(0)
+                status = st.empty()
+
+                status.markdown("📡 **Fetching data from the depths of BigQuery...**")
+                for i in range(40):
+                    progress_bar.progress(min(i / 100, 0.8))
+                    time.sleep(0.01)
+
                 with st.spinner(
                     f"""**Recherche de** "*{user_name}*" **en cours...**"""
                 ):
                     filtered_df = search_users_by_name(user_name)
+
+                status.markdown("🤹‍♂️ **Sorting data like a circus juggler...**")
+                for i in range(40, 80):
+                    progress_bar.progress(min(i / 100, 0.8))
+                    time.sleep(0.01)
+
+                progress_bar.progress(80)
+                status.empty()
 
                 if filtered_df.empty:
                     st.write("**Liste des candidats potentiels**")
@@ -352,37 +422,11 @@ else:
         if "selected_plans" not in st.session_state:
             st.session_state["selected_plans"] = []
 
-        def load_first_letters(
-            letter_path="letters.csv", fallback_path="Doc/mail_list.csv"
-        ):
-            # ⚠️ Ne pas utiliser de cache, recharger à chaque appel
-
-            if os.path.exists(letter_path):
-                try:
-                    letters_df = pd.read_csv(letter_path)
-                    letters = (
-                        letters_df["first_letter"]
-                        .dropna()
-                        .astype(str)
-                        .str.strip()
-                        .str.lower()
-                        .unique()
-                        .tolist()
-                    )
-                    return sorted(letters)
-                except Exception as e:
-                    print(
-                        f"⚠️ Erreur lecture letters.csv : {e} — fallback sur le fichier source."
-                    )
-
-                # Initialisation
-
         if "letters" not in st.session_state:
             st.session_state["letters"] = load_first_letters()
 
         if "selected_plans" not in st.session_state:
             st.session_state["selected_plans"] = []
-
         if "last_selected_letter" not in st.session_state:
             st.session_state["last_selected_letter"] = st.session_state["letters"][0]
 
