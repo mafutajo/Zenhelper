@@ -10,8 +10,8 @@ import os
 
 # Charger les variables du .env
 load_dotenv()
-project_id = os.environ.get("GCP_PROJECT", "kazadata-staging-prod-frkz")
-bq_dataset = os.environ.get("BQ_DATASET", "kzp_api_prod")
+project_id = os.environ.get("GCP_PROJECT")
+bq_dataset = os.environ.get("BQ_DATASET")
 
 
 def load_first_letters():
