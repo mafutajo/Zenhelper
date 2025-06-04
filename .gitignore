@@ -13,3 +13,5 @@ zen/
 
 zen/
 .env
+.csv
+.toml.streamlit/secrets.toml
