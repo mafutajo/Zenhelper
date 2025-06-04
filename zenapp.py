@@ -144,6 +144,27 @@ st.set_page_config(
     page_icon="https://cdn-icons-png.freepik.com/512/4038/4038734.png?uid=R150887685&ga=GA1.1.1638742484.1714642249",
     layout="wide",
 )
+
+# 👉 Masquer le menu, le footer, le bouton Rerun et le bandeau "Running"
+st.markdown(
+    """
+    <style>
+        /* Cache le menu hamburger (≡) */
+        #MainMenu {visibility: hidden;}
+
+        /* Cache le footer "Made with Streamlit" */
+        footer {visibility: hidden;}
+
+        /* Cache le bouton "Rerun" */
+        .stDeployButton {visibility: hidden;}
+
+        /* Cache le bandeau "Running" */
+        .stStatusWidget {visibility: hidden;}
+    </style>
+""",
+    unsafe_allow_html=True,
+)
+
 if not st.session_state.auth:
 
     split = st.columns([2, 4, 2], gap="large")
