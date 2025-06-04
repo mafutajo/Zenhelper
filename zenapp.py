@@ -357,7 +357,7 @@ else:
                 progress_bar = st.progress(0)
                 status = st.empty()
 
-                status.markdown("📡 **Fetching data from the depths of BigQuery...**")
+                status.markdown("🕵🏻‍♀️ Je mène l’enquête sur BigQuery 📂")
                 for i in range(40):
                     progress_bar.progress(min(i / 100, 0.8))
                     time.sleep(0.01)
@@ -367,7 +367,9 @@ else:
                 ):
                     filtered_df = search_users_by_name(user_name)
 
-                status.markdown("🤹‍♂️ **Sorting data like a circus juggler...**")
+                status.markdown(
+                    "👩🏻‍💼 **Je classe toutes les réponses potentielles...**"
+                )
                 for i in range(40, 80):
                     progress_bar.progress(min(i / 100, 0.8))
                     time.sleep(0.01)
